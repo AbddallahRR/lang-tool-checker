@@ -35,9 +35,37 @@ function markFor(match: LTMatch): Decoration {
 	return grammarMark;
 }
 
+function inWikilink(text: string, pos: number): boolean {
+	const open = text.lastIndexOf("[[", pos);
+	if (open === -1) return false;
+	const close = text.indexOf("]]", open + 2);
+	return close === -1 || close >= pos;
+}
+
+// ponytail: linear scan per match; precompute fences per doc if docs get huge
+function insideCodeFence(text: string, pos: number): boolean {
+	let inFence = false;
+	let lineStart = 0;
+	while (lineStart < text.length && lineStart <= pos) {
+		const lineEnd = text.indexOf("\n", lineStart);
+		const end = lineEnd === -1 ? text.length : lineEnd;
+		if (pos <= end) return inFence;
+		if (/^\s*```/.test(text.slice(lineStart, end))) inFence = !inFence;
+		lineStart = end + 1;
+	}
+	return inFence;
+}
+
 export function isExcluded(match: LTMatch, docText: string): boolean {
+	const pos = match.offset;
 	const segment = docText.slice(match.offset, match.offset + match.length);
-	return /^[\s\n]+$/.test(segment) || /[`|]/.test(segment) || segment.includes("://");
+	return (
+		/^[\s\n]+$/.test(segment) ||
+		/[`|]/.test(segment) ||
+		segment.includes("://") ||
+		inWikilink(docText, pos) ||
+		insideCodeFence(docText, pos)
+	);
 }
 
 export function validRange(match: LTMatch, docText: string): { from: number; to: number } | null {

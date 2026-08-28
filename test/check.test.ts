@@ -41,6 +41,15 @@ assert("url excluded", isExcluded(match(0, 21), "https://example.com foo"));
 assert("whitespace-only excluded", isExcluded(match(0, 3), "   foo"));
 assert("normal word not excluded", !isExcluded(match(0, 6), "pruaba x"));
 
+// Exclusions: wikilinks and code fences
+assert("wikilink excluded", isExcluded(match(2, 6), "[[pruaba]] x"));
+assert("outside wikilink not excluded", !isExcluded(match(9, 6), "[[ok]] pruaba"));
+const fenced = "```js\npruaba\n```";
+assert("code fence excluded", isExcluded(match(7, 6), fenced));
+const openFence = "```js\npruaba";
+assert("unterminated code fence excluded", isExcluded(match(7, 6), openFence));
+assert("outside code fence not excluded", !isExcluded(match(0, 6), "pruaba\n```js\nx\n```"));
+
 if (failures > 0) {
 	console.error(`\n${failures} check(s) failed`);
 	process.exit(1);
