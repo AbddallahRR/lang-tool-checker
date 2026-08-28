@@ -37,6 +37,7 @@ pnpm test          # self-check de la lógica de offsets/exclusiones
 
 - Escribe y los errores se subrayan en línea (rojo = ortografía/gramática, amarillo = estilo).
 - Haz clic en una palabra subrayada para ver las sugerencias corregidas, ignorar o añadir al diccionario.
+- Haz clic en la sección "LT: listo" de la barra de estado (abajo a la derecha) para abrir el panel de revisión: corrige cada error individualmente o aplica todas las sugerencias a la vez.
 - Las palabras/errores en bloques de código, wikilinks (`[[…]]`) y URLs no se marcan.
 - Al aplicar una corrección del plugin, solo se re-revisa la oración afectada (no todo el documento).
 - Al abrir o renombrar un archivo, se revisa la ortografía de su nombre y avisa si tiene errores.

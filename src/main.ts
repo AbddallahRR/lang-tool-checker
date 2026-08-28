@@ -2,8 +2,9 @@ import { MarkdownView, Notice, Plugin, Editor, TAbstractFile, TFile } from "obsi
 import { Extension } from "@codemirror/state";
 import { LanguageToolClient } from "./lt-client";
 import { ServerManager, ServerStatus } from "./server-manager";
-import { spellCheckExtension, getSpellCheckPlugin } from "./spell-check";
+import { spellCheckExtension, getSpellCheckPlugin, bulkReplacements, quotePartner } from "./spell-check";
 import { SuggestionPopover } from "./suggestion-popover";
+import { ReviewModal } from "./review-modal";
 import { LangToolSettingTab } from "./settings";
 import { DEFAULT_SETTINGS, LTMatch, PluginSettings } from "./types";
 
@@ -27,6 +28,8 @@ export default class LangToolPlugin extends Plugin {
 
 		this.statusBar = this.addStatusBarItem();
 		this.statusBar.setText("LT: iniciando…");
+		this.statusBar.style.cursor = "pointer";
+		this.statusBar.addEventListener("click", () => this.openReview());
 		this.server.onStatus((s) => this.onServerStatus(s));
 
 		this.addSettingTab(new LangToolSettingTab(this.app, this));
@@ -142,12 +145,19 @@ export default class LangToolPlugin extends Plugin {
 		const view = this.app.workspace.getActiveViewOfType(MarkdownView);
 		if (!view) return;
 		const editor = view.editor;
-		const pos = editor.offsetToPos(match.offset);
-		const endPos = editor.offsetToPos(match.offset + match.length);
+		const doc = editor.getValue();
+		const partner = quotePartner(doc, match.offset, doc.slice(match.offset, match.offset + match.length), suggestion);
+		const edits = [
+			{ from: match.offset, to: match.offset + match.length, text: suggestion },
+			...(partner ? [partner] : []),
+		].sort((a, b) => b.from - a.from);
 		const plugin = getSpellCheckPlugin();
-		if (plugin) plugin.skipNextAuto = true;
-		editor.replaceRange(suggestion, pos, endPos);
-		if (plugin) void plugin.checkSentence(match.offset);
+		for (const e of edits) {
+			if (plugin) plugin.skipNextAuto = true;
+			editor.replaceRange(e.text, editor.offsetToPos(e.from), editor.offsetToPos(e.to));
+		}
+		// quote pairing is context-sensitive for LT: full recheck clears any stale "unmatched" match
+		if (plugin) partner ? plugin.refresh() : void plugin.checkSentence(match.offset);
 	}
 
 	private ignoreRule(match: LTMatch): void {
@@ -161,6 +171,37 @@ export default class LangToolPlugin extends Plugin {
 			this.settings.personalDictionary.push(word);
 			this.saveSettings();
 		}
+	}
+
+	private openReview(): void {
+		const active = this.app.workspace.getActiveViewOfType(MarkdownView);
+		if (!active) {
+			new Notice("No hay una nota abierta para revisar");
+			return;
+		}
+		const plugin = getSpellCheckPlugin();
+		const matches = plugin ? plugin.getMatches() : [];
+		new ReviewModal(this.app, matches, this.ignoredRules, {
+			applySuggestion: (m, s) => this.applySuggestion(m, s),
+			applyAll: () => this.applyAll(),
+			ignoreRule: (m) => this.ignoreRule(m),
+			getMatches: () => (getSpellCheckPlugin()?.getMatches() ?? []),
+		}).open();
+	}
+
+	private applyAll(): boolean {
+		const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+		const plugin = getSpellCheckPlugin();
+		if (!view || !plugin) return false;
+		const replacements = bulkReplacements(plugin.getMatches());
+		if (replacements.length === 0) return false;
+		const editor = view.editor;
+		plugin.skipNextAuto = true;
+		for (const r of replacements) {
+			editor.replaceRange(r.replacement, editor.offsetToPos(r.from), editor.offsetToPos(r.to));
+		}
+		plugin.refresh();
+		return true;
 	}
 
 	private async manualCheck(editor: Editor): Promise<void> {

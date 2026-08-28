@@ -1,4 +1,4 @@
-import { isExcluded, validRange, sentenceRange } from "../src/spell-check";
+import { isExcluded, validRange, sentenceRange, bulkReplacements, quotePartner } from "../src/spell-check";
 import { ChangeSet } from "@codemirror/state";
 import { LTMatch } from "../src/types";
 
@@ -58,6 +58,25 @@ assert("unterminated sentence goes to end", sentenceRange("abc def ghi", 4).to =
 assert("newline acts as boundary", sentenceRange("primera\nsegunda linea", 9).from === 8);
 const shifted = ChangeSet.of({ from: 4, to: 4, insert: "X" }, "abcd");
 assert("change maps positions after insert", shifted.mapPos(4, 1) === 5);
+
+// Bulk replacements (apply all)
+function withReps(offset: number, length: number, reps: string[]): LTMatch {
+	return { ...match(offset, length), replacements: reps.map((value) => ({ value })) };
+}
+const bulk = bulkReplacements([withReps(8, 6, ["prueba"]), withReps(0, 3, []), withReps(20, 4, ["uno", "dos"])]);
+assert("bulk skips matches without suggestions", bulk.length === 2);
+assert("bulk picks first suggestion", bulk[1].replacement === "prueba" && bulk[0].replacement === "uno");
+assert("bulk sorts by from descending", bulk[0].from === 20 && bulk[1].from === 8);
+
+// Quote pairing (typographic quotes)
+const qdoc = 'El dijo "hola mundo" y se fue.';
+const openQ = quotePartner(qdoc, 8, '"', "“"); // first quote at 8
+assert("opening quote finds closing partner", openQ !== null && openQ.text === "”" && qdoc[openQ!.from] === '"');
+const closePartner = quotePartner(qdoc, 19, '"', "”"); // closing quote at 19
+assert("closing quote finds opening partner", closePartner !== null && closePartner.text === "“" && qdoc[closePartner!.from] === '"');
+assert("non-quote replacement ignored", quotePartner(qdoc, 8, '"', "foo") === null);
+assert("non-quote orig ignored", quotePartner(qdoc, 8, "a", "“") === null);
+assert("no partner on same line returns null", quotePartner('solo " una', 6, '"', "“") === null);
 
 if (failures > 0) {
 	console.error(`\n${failures} check(s) failed`);

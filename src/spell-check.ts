@@ -90,6 +90,44 @@ export function getSpellCheckPlugin(): SpellCheckPlugin | undefined {
 	return live[live.length - 1];
 }
 
+export interface BulkReplacement {
+	from: number;
+	to: number;
+	replacement: string;
+}
+
+export function bulkReplacements(matches: LTMatch[]): BulkReplacement[] {
+	return matches
+		.filter((m) => m.replacements.length > 0)
+		.map((m) => ({ from: m.offset, to: m.offset + m.length, replacement: m.replacements[0].value }))
+		.sort((a, b) => b.from - a.from);
+}
+
+const OPENING_QUOTES = new Set(["“", "‘"]);
+const COMPLEMENT: Record<string, string> = { "“": "”", "”": "“", "‘": "’", "’": "‘" };
+
+// ponytail: pairs straight quotes on the same line; multi-line quotes or 3+ in one line degrade to the first partner
+export function quotePartner(doc: string, offset: number, orig: string, replacement: string): { from: number; to: number; text: string } | null {
+	if (orig.length !== 1 || !(replacement in COMPLEMENT)) return null;
+	const repDouble = replacement === "“" || replacement === "”";
+	const match = (ch: string) => (repDouble ? ch === '"' : ch === "'");
+	if (!match(orig)) return null;
+	const isOpening = OPENING_QUOTES.has(replacement);
+	const CAP = 160;
+	if (isOpening) {
+		const end = Math.min(doc.length, offset + CAP);
+		for (let i = offset + 1; i < end; i++) {
+			if (match(doc[i])) return { from: i, to: i + 1, text: COMPLEMENT[replacement] };
+		}
+	} else {
+		const start = Math.max(0, offset - CAP);
+		for (let i = offset - 1; i >= start; i--) {
+			if (match(doc[i])) return { from: i, to: i + 1, text: COMPLEMENT[replacement] };
+		}
+	}
+	return null;
+}
+
 class SpellCheckPlugin {
 	decorations: DecorationSet;
 	skipNextAuto = false;
@@ -108,6 +146,18 @@ class SpellCheckPlugin {
 		this.decorations = Decoration.none;
 		live.push(this);
 		if (settings().autoCheck) this.schedule();
+	}
+
+	getMatches(): LTMatch[] {
+		const doc = this.view.state.doc.toString();
+		return this.matches.filter((m) => !isExcluded(m, doc) && validRange(m, doc) !== null);
+	}
+
+	refresh(): void {
+		this.matches = [];
+		this.lastCheckedDoc = "";
+		this.decorations = Decoration.none;
+		if (this.settings().autoCheck) this.schedule();
 	}
 
 	private schedule() {
