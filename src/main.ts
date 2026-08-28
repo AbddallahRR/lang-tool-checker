@@ -1,8 +1,8 @@
-import { MarkdownView, Notice, Plugin, Editor } from "obsidian";
+import { MarkdownView, Notice, Plugin, Editor, TAbstractFile, TFile } from "obsidian";
 import { Extension } from "@codemirror/state";
 import { LanguageToolClient } from "./lt-client";
 import { ServerManager, ServerStatus } from "./server-manager";
-import { spellCheckExtension } from "./spell-check";
+import { spellCheckExtension, getSpellCheckPlugin } from "./spell-check";
 import { SuggestionPopover } from "./suggestion-popover";
 import { LangToolSettingTab } from "./settings";
 import { DEFAULT_SETTINGS, LTMatch, PluginSettings } from "./types";
@@ -40,6 +40,31 @@ export default class LangToolPlugin extends Plugin {
 		});
 
 		this.app.workspace.onLayoutReady(() => this.startServer());
+
+		this.registerEvent(this.app.vault.on("rename", (file) => this.checkFileName(file)));
+		this.registerEvent(this.app.workspace.on("file-open", (file) => this.checkFileName(file)));
+	}
+
+	private async checkFileName(file: TAbstractFile | null): Promise<void> {
+		if (!file || !this.settings.checkFileNames || file instanceof TFile === false || file.extension !== "md") return;
+		try {
+			await this.server.waitReady();
+			const name = file.basename;
+			const result = await this.client.checkText(name);
+			const errors = result.matches
+				.filter(
+					(m) =>
+						m.rule.issueType === "misspelling" &&
+						!this.ignoredRules.has(m.rule.id) &&
+						!this.settings.disabledRules.includes(m.rule.id),
+				)
+				.map((m) => name.slice(m.offset, m.offset + m.length) || m.message);
+			if (errors.length) {
+				new Notice(`El nombre del archivo "${name}" podría tener errores: ${errors.join(", ")}`);
+			}
+		} catch {
+			/* server not ready / check failed: no-op */
+		}
 	}
 
 	private async startServer(): Promise<void> {
@@ -119,7 +144,10 @@ export default class LangToolPlugin extends Plugin {
 		const editor = view.editor;
 		const pos = editor.offsetToPos(match.offset);
 		const endPos = editor.offsetToPos(match.offset + match.length);
+		const plugin = getSpellCheckPlugin();
+		if (plugin) plugin.skipNextAuto = true;
 		editor.replaceRange(suggestion, pos, endPos);
+		if (plugin) void plugin.checkSentence(match.offset);
 	}
 
 	private ignoreRule(match: LTMatch): void {

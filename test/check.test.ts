@@ -1,4 +1,5 @@
-import { isExcluded, validRange } from "../src/spell-check";
+import { isExcluded, validRange, sentenceRange } from "../src/spell-check";
+import { ChangeSet } from "@codemirror/state";
 import { LTMatch } from "../src/types";
 
 function match(offset: number, length: number, issueType = "misspelling"): LTMatch {
@@ -49,6 +50,14 @@ assert("code fence excluded", isExcluded(match(7, 6), fenced));
 const openFence = "```js\npruaba";
 assert("unterminated code fence excluded", isExcluded(match(7, 6), openFence));
 assert("outside code fence not excluded", !isExcluded(match(0, 6), "pruaba\n```js\nx\n```"));
+
+// Sentence range
+assert("sentence start after previous terminator", sentenceRange("Uno. Dos tres.", 6).from === 4);
+assert("sentence end at next terminator", sentenceRange("Uno. Dos tres.", 6).to === 14);
+assert("unterminated sentence goes to end", sentenceRange("abc def ghi", 4).to === 11);
+assert("newline acts as boundary", sentenceRange("primera\nsegunda linea", 9).from === 8);
+const shifted = ChangeSet.of({ from: 4, to: 4, insert: "X" }, "abcd");
+assert("change maps positions after insert", shifted.mapPos(4, 1) === 5);
 
 if (failures > 0) {
 	console.error(`\n${failures} check(s) failed`);

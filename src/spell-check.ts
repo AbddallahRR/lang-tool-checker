@@ -1,4 +1,4 @@
-import { RangeSetBuilder } from "@codemirror/state";
+import { ChangeSet, RangeSetBuilder } from "@codemirror/state";
 import {
 	Decoration,
 	DecorationSet,
@@ -75,8 +75,24 @@ export function validRange(match: LTMatch, docText: string): { from: number; to:
 	return { from, to };
 }
 
+// ponytail: newline/.?! boundaries; multi-line sentences or paragraphs degrade to the current line
+export function sentenceRange(doc: string, pos: number): { from: number; to: number } {
+	const from =
+		Math.max(doc.lastIndexOf(".", pos - 1), doc.lastIndexOf("!", pos - 1), doc.lastIndexOf("?", pos - 1), doc.lastIndexOf("\n", pos - 1)) + 1;
+	const ends = [doc.indexOf(".", pos), doc.indexOf("!", pos), doc.indexOf("?", pos), doc.indexOf("\n", pos)].filter((i) => i !== -1);
+	const to = ends.length ? Math.min(...ends) + 1 : doc.length;
+	return { from, to };
+}
+
+const live: SpellCheckPlugin[] = [];
+
+export function getSpellCheckPlugin(): SpellCheckPlugin | undefined {
+	return live[live.length - 1];
+}
+
 class SpellCheckPlugin {
 	decorations: DecorationSet;
+	skipNextAuto = false;
 	private matches: LTMatch[] = [];
 	private checking = false;
 	private pending = false;
@@ -90,6 +106,7 @@ class SpellCheckPlugin {
 		private cb: SpellCheckCallbacks,
 	) {
 		this.decorations = Decoration.none;
+		live.push(this);
 		if (settings().autoCheck) this.schedule();
 	}
 
@@ -126,13 +143,50 @@ class SpellCheckPlugin {
 
 	private buildDecorations(docText: string): DecorationSet {
 		const builder = new RangeSetBuilder<Decoration>();
-		for (const m of this.matches) {
+		const sorted = [...this.matches].sort((a, b) => a.offset - b.offset);
+		for (const m of sorted) {
 			if (isExcluded(m, docText)) continue;
 			const range = validRange(m, docText);
 			if (!range) continue;
 			builder.add(range.from, range.to, markFor(m));
 		}
 		return builder.finish();
+	}
+
+	private shiftAfterEdit(changes: ChangeSet): void {
+		const touched: [number, number][] = [];
+		changes.iterChanges((fromA, toA) => touched.push([fromA, toA]));
+		const kept: LTMatch[] = [];
+		for (const m of this.matches) {
+			if (touched.some(([f, t]) => m.offset < t && m.offset + m.length > f)) continue;
+			const from = changes.mapPos(m.offset, 1);
+			const to = changes.mapPos(m.offset + m.length, -1);
+			if (from < 0 || to > this.view.state.doc.length || from >= to) continue;
+			kept.push({ ...m, offset: from, length: to - from });
+		}
+		this.matches = kept;
+	}
+
+	async checkSentence(docFrom: number): Promise<void> {
+		if (this.checking) return;
+		const doc = this.view.state.doc.toString();
+		const { from, to } = sentenceRange(doc, Math.max(0, Math.min(docFrom, doc.length)));
+		if (to - from <= 0) return;
+		this.checking = true;
+		try {
+			const sent = doc.slice(from, to);
+			const raw = await this.cb.onCheck(sent);
+			this.matches = this.matches
+				.filter((m) => m.offset < from || m.offset + m.length > to)
+				.concat(raw.map((m) => ({ ...m, offset: m.offset + from })));
+			this.lastCheckedDoc = doc;
+			this.decorations = this.buildDecorations(doc);
+			this.view.dispatch({});
+		} catch {
+			this.decorations = this.buildDecorations(doc);
+		} finally {
+			this.checking = false;
+		}
 	}
 
 	onClick(view: EditorView, event: MouseEvent): boolean {
@@ -157,7 +211,12 @@ class SpellCheckPlugin {
 	}
 
 	update(update: ViewUpdate) {
-		if (update.docChanged) {
+		if (!update.docChanged) return;
+		if (this.skipNextAuto) {
+			this.skipNextAuto = false;
+			this.shiftAfterEdit(update.changes);
+			this.decorations = Decoration.none;
+		} else {
 			this.decorations = Decoration.none;
 			this.matches = [];
 			this.schedule();
@@ -165,6 +224,8 @@ class SpellCheckPlugin {
 	}
 
 	destroy() {
+		const i = live.indexOf(this);
+		if (i !== -1) live.splice(i, 1);
 		if (this.timer !== null) window.clearTimeout(this.timer);
 		this.client.cancel();
 	}

@@ -24,6 +24,16 @@ export class LangToolSettingTab extends PluginSettingTab {
 			);
 
 		new Setting(containerEl)
+			.setName("Revisar nombres de archivo")
+			.setDesc("Revisar la ortografía del nombre del archivo (título) al abrirlo o renombrarlo.")
+			.addToggle((t) =>
+				t.setValue(this.plugin.settings.checkFileNames).onChange(async (v) => {
+					this.plugin.settings.checkFileNames = v;
+					await this.plugin.saveSettings();
+				}),
+			);
+
+		new Setting(containerEl)
 			.setName("Idioma")
 			.setDesc("Código de idioma para LanguageTool (ej: es, en-US, fr, de).")
 			.addText((t) =>

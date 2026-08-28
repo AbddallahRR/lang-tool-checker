@@ -41,6 +41,7 @@ export interface PluginSettings {
 	port: number;
 	serverJarPath: string;
 	autoCheck: boolean;
+	checkFileNames: boolean;
 	checkDelayMs: number;
 	personalDictionary: string[];
 	disabledRules: string[];
@@ -56,6 +57,7 @@ export const DEFAULT_SETTINGS: PluginSettings = {
 	port: 8081,
 	serverJarPath: "/opt/languagetool/languagetool-server.jar",
 	autoCheck: true,
+	checkFileNames: true,
 	checkDelayMs: 500,
 	personalDictionary: [],
 	disabledRules: [],

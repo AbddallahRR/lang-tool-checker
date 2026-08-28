@@ -37,10 +37,14 @@ pnpm test          # self-check de la lógica de offsets/exclusiones
 
 - Escribe y los errores se subrayan en línea (rojo = ortografía/gramática, amarillo = estilo).
 - Haz clic en una palabra subrayada para ver las sugerencias corregidas, ignorar o añadir al diccionario.
-- Las palabras/errores en bloques de código y URLs no se marcan.
+- Las palabras/errores en bloques de código, wikilinks (`[[…]]`) y URLs no se marcan.
+- Al aplicar una corrección del plugin, solo se re-revisa la oración afectada (no todo el documento).
+- Al abrir o renombrar un archivo, se revisa la ortografía de su nombre y avisa si tiene errores.
 
 ## Ajustes
 
+- **Autocheck**: revisar automáticamente mientras escribes.
+- **Revisar nombres de archivo**: revisar la ortografía del nombre del archivo al abrirlo o renombrarlo.
 - **Idioma**: código de LanguageTool (ej. `es`, `en-US`, `fr`, `de`). Por defecto `es`.
 - **Puerto del servidor**: puerto local del servidor LT (por defecto `8081`).
 - **Ruta del JAR**: ruta a `languagetool-server.jar`.
