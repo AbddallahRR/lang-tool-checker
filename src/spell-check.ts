@@ -129,7 +129,11 @@ class SpellCheckPlugin {
 	}
 
 	update(update: ViewUpdate) {
-		if (update.docChanged) this.schedule();
+		if (update.docChanged) {
+			this.decorations = Decoration.none;
+			this.matches = [];
+			this.schedule();
+		}
 	}
 
 	destroy() {
