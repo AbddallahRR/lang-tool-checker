@@ -1,0 +1,29 @@
+{
+  "name": "lang-tool-checker",
+  "version": "1.0.0",
+  "description": "Corrector ortográfico y gramatical 100% local para Obsidian usando LanguageTool",
+  "main": "main.js",
+  "scripts": {
+    "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
+    "dev": "node esbuild.config.mjs",
+    "test": "node test/run.js"
+  },
+  "keywords": [
+    "obsidian",
+    "languagetool",
+    "spellcheck",
+    "grammar"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "@codemirror/language": "^6.12.4",
+    "@codemirror/state": "^6.7.1",
+    "@codemirror/view": "^6.43.9",
+    "@types/node": "^22.0.0",
+    "builtin-modules": "^3.3.0",
+    "esbuild": "^0.23.0",
+    "obsidian": "latest",
+    "tslib": "^2.6.0",
+    "typescript": "^5.5.0"
+  }
+}

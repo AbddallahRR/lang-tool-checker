@@ -1,0 +1,10 @@
+{
+  "id": "lang-tool-checker",
+  "name": "Lang Tool Checker",
+  "version": "1.0.0",
+  "minAppVersion": "0.15.0",
+  "description": "Corrector ortográfico y gramatical 100% local para Obsidian usando LanguageTool.",
+  "author": "Lang Tool Checker",
+  "authorUrl": "",
+  "isDesktopOnly": true
+}
