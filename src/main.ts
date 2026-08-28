@@ -62,6 +62,7 @@ export default class LangToolPlugin extends Plugin {
 			this.client,
 			{
 				onCheck: async (text: string): Promise<LTMatch[]> => {
+					await this.server.waitReady();
 					const result = await this.client.checkText(text);
 					this.server.pingActive();
 					return this.filterMatches(result.matches);
@@ -137,6 +138,7 @@ export default class LangToolPlugin extends Plugin {
 	private async manualCheck(editor: Editor): Promise<void> {
 		const text = editor.getValue();
 		try {
+			await this.server.waitReady();
 			const result = await this.client.checkText(text);
 			const matches = this.filterMatches(result.matches);
 			new Notice(`LanguageTool: ${matches.length} sugerencias`);

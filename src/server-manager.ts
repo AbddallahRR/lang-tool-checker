@@ -1,4 +1,4 @@
-import { spawn, ChildProcess } from "child_process";
+import { spawn, execSync, ChildProcess } from "child_process";
 import * as fs from "fs";
 import { LanguageToolClient } from "./lt-client";
 import { PluginSettings } from "./types";
@@ -7,14 +7,21 @@ export type ServerStatus = "idle" | "starting" | "running" | "stopped" | "error"
 
 export class ServerManager {
 	private proc: ChildProcess | null = null;
+	private adopted = false;
 	private status: ServerStatus = "idle";
 	private onStatusChange: (s: ServerStatus) => void = () => {};
 	private idleTimer: NodeJS.Timeout | null = null;
+	private startPromise: Promise<void> | null = null;
 
 	constructor(private settings: () => PluginSettings, private client: LanguageToolClient) {}
 
 	get serverStatus(): ServerStatus {
 		return this.status;
+	}
+
+	/** resolves once the server is up, or rejects if it can't start */
+	async waitReady(): Promise<void> {
+		return this.start();
 	}
 
 	onStatus(cb: (s: ServerStatus) => void): void {
@@ -57,7 +64,17 @@ export class ServerManager {
 	}
 
 	async start(): Promise<void> {
-		if (this.proc) return;
+		if (this.startPromise) return this.startPromise;
+		this.startPromise = this.startInner();
+		try {
+			await this.startPromise;
+		} finally {
+			this.startPromise = null;
+		}
+	}
+
+	private async startInner(): Promise<void> {
+		if (this.status === "running") return;
 		const settings = this.settings();
 
 		if (!fs.existsSync(settings.serverJarPath)) {
@@ -69,6 +86,7 @@ export class ServerManager {
 		// leftover from a previous load), just adopt it instead of spawning a duplicate
 		if (await this.client.isServerUp()) {
 			this.setStatus("running");
+			this.adopted = true;
 			console.info(`[LangTool] usando servidor ya activo en el puerto ${settings.port}`);
 			return;
 		}
@@ -76,8 +94,16 @@ export class ServerManager {
 		this.setStatus("starting");
 
 		const java = this.javaBinary();
+		const jvmFlags = settings.maxHeap
+			? [
+					"-Xms" + settings.maxHeap,
+					"-Xmx" + settings.maxHeap,
+					"-XX:+UseSerialGC",
+					"-XX:MaxMetaspaceSize=128m",
+				]
+			: [];
 		const args = [
-			...(settings.maxHeap ? ["-Xmx" + settings.maxHeap] : []),
+			...jvmFlags,
 			"-jar",
 			settings.serverJarPath,
 			"--port",
@@ -113,8 +139,17 @@ export class ServerManager {
 	private spawnAndWait(java: string, args: string[], port: number): Promise<"ok" | string> {
 		return new Promise((resolve) => {
 			let stderr = "";
-			const proc = spawn(java, args, {
-				stdio: ["ignore", "ignore", "pipe"],
+			// launch java through a tiny python wrapper that sets PR_SET_PDEATHSIG so the
+			// JVM is SIGTERMed automatically when Obsidian dies (even on abrupt close where
+			// onunload never runs), avoiding orphan LanguageTool servers.
+			const pdeathsig = [
+				"import ctypes,os,sys;",
+				"libc=ctypes.CDLL('libc.so.6');",
+				"libc.prctl(1,15);", // PR_SET_PDEATHSIG=1, SIGTERM=15
+				"os.execv(sys.argv[1],sys.argv[1:])",
+			].join("");
+			const proc = spawn("python3", [ "-c", pdeathsig, java, ...args ], {
+				stdio: ["ignore", "ignore", "pipe"], // discard stdout (LT logs go there)
 				detached: false,
 			});
 			this.proc = proc;
@@ -150,14 +185,14 @@ export class ServerManager {
 
 			const tick = async () => {
 				if (settled) return;
-				if (await this.client.isServerUp()) {
-					clearTimeout(timeout);
-					finish("ok");
-					return;
-				}
 				if (proc.exitCode !== null) {
 					clearTimeout(timeout);
 					finish(stderr);
+					return;
+				}
+				if (await this.client.isServerUp()) {
+					clearTimeout(timeout);
+					finish("ok");
 					return;
 				}
 				setTimeout(tick, 1000);
@@ -186,8 +221,8 @@ export class ServerManager {
 
 	stop(): Promise<void> {
 		const proc = this.proc;
-		this.proc = null;
 		if (proc && proc.exitCode === null) {
+			this.proc = null;
 			proc.kill();
 			return new Promise<void>((resolve) => {
 				proc.once("exit", () => {
@@ -199,6 +234,14 @@ export class ServerManager {
 					resolve();
 				}, 5000);
 			});
+		}
+		this.proc = null;
+		// adopted server wasn't spawned by us: find and kill what listens on the port
+		if (this.adopted) {
+			this.adopted = false;
+			try {
+				execSync(`fuser -k ${this.settings().port}/tcp`, { stdio: "ignore" });
+			} catch {}
 		}
 		this.setStatus("stopped");
 		return Promise.resolve();

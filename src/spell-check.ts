@@ -15,9 +15,18 @@ export interface SpellCheckCallbacks {
 	onClickMatch: (view: EditorView, match: LTMatch, coords: { x: number; y: number }) => void;
 }
 
-const spellMark = Decoration.mark({ class: "lt-spell-error", attributes: { "data-lt": "word" } });
-const grammarMark = Decoration.mark({ class: "lt-grammar-error", attributes: { "data-lt": "grammar" } });
-const styleMark = Decoration.mark({ class: "lt-style-error", attributes: { "data-lt": "style" } });
+const spellMark = Decoration.mark({
+	class: "lt-spell-error",
+	attributes: { "data-lt": "word" },
+});
+const grammarMark = Decoration.mark({
+	class: "lt-grammar-error",
+	attributes: { "data-lt": "grammar" },
+});
+const styleMark = Decoration.mark({
+	class: "lt-style-error",
+	attributes: { "data-lt": "style" },
+});
 
 function markFor(match: LTMatch): Decoration {
 	const issue = match.rule.issueType || "";
