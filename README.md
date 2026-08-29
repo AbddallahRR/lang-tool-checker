@@ -15,9 +15,10 @@ Plugin de Obsidian (solo escritorio) que corrige ortografía y gramática **100%
 
 ## Instalación del servidor
 
-El plugin gestiona el servidor automáticamente: lo arranca al abrir Obsidian y lo apaga al cerrarlo. Solo necesitas indicarle la ruta al jar en los ajustes.
+El plugin gestiona el servidor automáticamente: lo arranca al abrir Obsidian y lo apaga al cerrarlo. Puedes elegir cómo obtener LanguageTool en **Ajustes → Lang Tool Checker → Modo de LanguageTool**:
 
-Si tu instalación quedó en otro lugar, configura la **"Ruta del JAR de LanguageTool"** en Ajustes → Lang Tool Checker.
+- **Instalar LanguageTool automáticamente**: descarga la versión estable oficial, la descomprime en la carpeta del plugin y la usa. No necesitas descargar nada a mano.
+- **Usar instalación existente**: apunta a un jar que ya tengas con la **"Ruta del JAR de LanguageTool"**.
 
 ## Desarrollar / construir el plugin
 
@@ -44,11 +45,12 @@ pnpm test          # self-check de la lógica de offsets/exclusiones
 
 ## Ajustes
 
+- **Modo de LanguageTool**: `Instalar automáticamente` o `Usar instalación existente`. En modo automático hay un botón de **Instalar**/**Reinstalar**.
 - **Autocheck**: revisar automáticamente mientras escribes.
 - **Revisar nombres de archivo**: revisar la ortografía del nombre del archivo al abrirlo o renombrarlo.
 - **Idioma**: código de LanguageTool (ej. `es`, `en-US`, `fr`, `de`). Por defecto `es`.
 - **Puerto del servidor**: puerto local del servidor LT (por defecto `8081`).
-- **Ruta del JAR**: ruta a `languagetool-server.jar`.
+- **Ruta del JAR**: ruta a `languagetool-server.jar` (solo en modo "usar instalación existente").
 - **Diccionario personal**: palabras que no se marcan como error.
 - **Reglas/categorías deshabilitadas**: IDs de reglas a apagar.
 - **Modo picky**: más sugerencias de estilo.

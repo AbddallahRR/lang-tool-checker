@@ -7,6 +7,21 @@ export class LangToolSettingTab extends PluginSettingTab {
 		super(app, plugin);
 	}
 
+	private async runInstall(): Promise<void> {
+		const notice = new Notice("Descargando LanguageTool 0%", 0);
+		try {
+			await this.plugin.installNow((pct) => {
+				notice.setMessage(`Descargando LanguageTool ${pct}%`);
+			});
+			notice.setMessage("LanguageTool instalado y configurado");
+			window.setTimeout(() => notice.hide(), 1500);
+			this.display();
+		} catch (e) {
+			notice.hide();
+			new Notice(`Error al instalar LanguageTool: ${(e as Error).message}`);
+		}
+	}
+
 	display(): void {
 		const { containerEl } = this;
 		containerEl.empty();
@@ -46,6 +61,37 @@ export class LangToolSettingTab extends PluginSettingTab {
 					}),
 			);
 
+		const installMode = this.plugin.settings.installMode;
+
+		new Setting(containerEl)
+			.setName("Modo de LanguageTool")
+			.setDesc("Instalar automáticamente LanguageTool o usar una instalación existente.")
+			.addDropdown((d) =>
+				d
+					.addOption("auto", "Instalar LanguageTool automáticamente")
+					.addOption("existing", "Usar instalación existente")
+					.setValue(this.plugin.settings.installMode)
+					.onChange(async (v) => {
+						this.plugin.settings.installMode = v as "auto" | "existing";
+						await this.plugin.saveSettings();
+						this.display();
+					}),
+			);
+
+		if (installMode === "auto") {
+			const installBtn = new Setting(containerEl)
+				.setName("Descarga")
+				.setDesc(this.plugin.installer.isInstalled() ? "LanguageTool ya está instalado." : "Descargar e instalar LanguageTool (varios cientos de MB).");
+			if (this.plugin.installer.isInstalled()) {
+				installBtn.addButton((b) => b.setButtonText("Reinstalar").setWarning().onClick(() => this.runInstall()));
+			} else {
+				installBtn.addButton((b) =>
+					b.setButtonText("Instalar").onClick(() => this.runInstall()),
+				);
+			}
+		}
+
+		if (installMode === "existing") {
 		new Setting(containerEl)
 			.setName("Ruta del JAR de LanguageTool")
 			.setDesc("Ruta absoluta a languagetool-server.jar.")
@@ -58,6 +104,7 @@ export class LangToolSettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					}),
 			);
+		}
 
 		new Setting(containerEl)
 			.setName("Puerto del servidor")

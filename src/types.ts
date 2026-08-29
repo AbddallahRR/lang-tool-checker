@@ -40,6 +40,7 @@ export interface PluginSettings {
 	language: string;
 	port: number;
 	serverJarPath: string;
+	installMode: "auto" | "existing";
 	autoCheck: boolean;
 	checkFileNames: boolean;
 	checkDelayMs: number;
@@ -56,6 +57,7 @@ export const DEFAULT_SETTINGS: PluginSettings = {
 	language: "es",
 	port: 8081,
 	serverJarPath: "/opt/languagetool/languagetool-server.jar",
+	installMode: "existing",
 	autoCheck: true,
 	checkFileNames: true,
 	checkDelayMs: 500,

@@ -2,6 +2,7 @@ import { MarkdownView, Notice, Plugin, Editor, TAbstractFile, TFile } from "obsi
 import { Extension } from "@codemirror/state";
 import { LanguageToolClient } from "./lt-client";
 import { ServerManager, ServerStatus } from "./server-manager";
+import { LanguageToolInstaller } from "./installer";
 import { spellCheckExtension, getSpellCheckPlugin, bulkReplacements, quotePartner } from "./spell-check";
 import { SuggestionPopover } from "./suggestion-popover";
 import { ReviewModal } from "./review-modal";
@@ -12,6 +13,7 @@ export default class LangToolPlugin extends Plugin {
 	settings: PluginSettings;
 	private client: LanguageToolClient;
 	private server: ServerManager;
+	installer: LanguageToolInstaller;
 	private popover: SuggestionPopover;
 	private statusBar: HTMLElement;
 	private ignoredRules = new Set<string>();
@@ -20,6 +22,7 @@ export default class LangToolPlugin extends Plugin {
 		await this.loadSettings();
 		this.client = new LanguageToolClient(() => this.settings);
 		this.server = new ServerManager(() => this.settings, this.client);
+		this.installer = new LanguageToolInstaller(this);
 		this.popover = new SuggestionPopover(() => this.settings, {
 			applySuggestion: (m, s) => this.applySuggestion(m, s),
 			ignoreRule: (m) => this.ignoreRule(m),
@@ -72,11 +75,31 @@ export default class LangToolPlugin extends Plugin {
 
 	private async startServer(): Promise<void> {
 		try {
+			await this.resolveJar();
 			await this.server.start();
 		} catch (e) {
 			this.statusBar.setText("LT: error");
 			new Notice(`LanguageTool: ${(e as Error).message}`);
 		}
+	}
+
+	/** points serverJarPath at the installed jar when in auto mode, installing it if needed */
+	private async resolveJar(): Promise<void> {
+		if (this.settings.installMode !== "auto") return;
+		if (!this.installer.isInstalled()) {
+			new Notice("Descargando LanguageTool…");
+			await this.installer.install();
+			new Notice("LanguageTool instalado");
+		}
+		this.settings.serverJarPath = this.installer.jarPath;
+		await this.saveSettings();
+	}
+
+	/** manual install from the settings UI */
+	async installNow(onProgress?: (pct: number) => void): Promise<void> {
+		this.settings.serverJarPath = await this.installer.install(onProgress);
+		this.settings.installMode = "auto";
+		await this.saveSettings();
 	}
 
 	onunload() {
@@ -219,6 +242,7 @@ export default class LangToolPlugin extends Plugin {
 	async restartServer(): Promise<void> {
 		await this.server.stop();
 		try {
+			await this.resolveJar();
 			await this.server.start();
 		} catch (e) {
 			new Notice(`LanguageTool: ${(e as Error).message}`);
